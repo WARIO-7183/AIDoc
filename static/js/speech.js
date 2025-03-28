@@ -1,209 +1,270 @@
-document.addEventListener('DOMContentLoaded', function() {
-    // Check if browser supports the Web Speech API
-    if ('speechSynthesis' in window) {
-        // Get all available voices
-        let voices = [];
+// Text-to-speech functionality with multi-language support
+function speakText(button) {
+    // Check if we're already speaking
+    if (window.speechSynthesis.speaking) {
+        // If speaking, stop it
+        window.speechSynthesis.cancel();
         
-        function populateVoices() {
-            voices = window.speechSynthesis.getVoices();
-        }
+        // Reset the icon
+        const icon = button.querySelector('i');
+        icon.classList.remove('fa-volume-mute');
+        icon.classList.add('fa-volume-up');
         
-        populateVoices();
-        
-        // Chrome needs a callback for voices
-        if (speechSynthesis.onvoiceschanged !== undefined) {
-            speechSynthesis.onvoiceschanged = populateVoices;
-        }
-        
-        // Function to find the most natural sounding voice
-        function getBestVoice() {
-            // First try to find a high-quality English voice
-            let preferredVoices = voices.filter(voice => 
-                voice.lang.includes('en') && 
-                (voice.name.includes('Natural') || 
-                 voice.name.includes('Neural') || 
-                 voice.name.includes('Premium') ||
-                 voice.name.includes('Wavenet'))
-            );
-            
-            // If we found any preferred voices, return the first one
-            if (preferredVoices.length > 0) {
-                return preferredVoices[0];
-            }
-            
-            // Otherwise, just find any English voice
-            let englishVoices = voices.filter(voice => voice.lang.includes('en'));
-            if (englishVoices.length > 0) {
-                return englishVoices[0];
-            }
-            
-            // If no English voice, return null and use default
-            return null;
-        }
-        
-        // Get all speak buttons
-        const speakButtons = document.querySelectorAll('.speak-btn');
-        
-        // Add click event to each button
-        speakButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                // Get the text content from the parent message
-                const messageContent = this.closest('.message-content');
-                const textToSpeak = messageContent.textContent.replace('Listen to this response', '').trim();
-                
-                // Stop any ongoing speech
-                if (window.speechSynthesis.speaking) {
-                    window.speechSynthesis.cancel();
-                    
-                    // Remove speaking class from all buttons
-                    document.querySelectorAll('.speak-btn').forEach(btn => {
-                        btn.classList.remove('speaking');
-                    });
-                    
-                    // If the button that was clicked is the one that's speaking, just stop and return
-                    if (this.classList.contains('speaking')) {
-                        this.classList.remove('speaking');
-                        return;
-                    }
-                }
-                
-                // Add speaking class to the button
-                this.classList.add('speaking');
-                
-                const currentLanguage = 'en-IN';
-                
-                // Create a new speech synthesis utterance
-                const utterance = new SpeechSynthesisUtterance(textToSpeak);
-                
-                // Choose the best available voice for the selected language
-                const bestVoice = getBestVoiceForLanguage(currentLanguage);
-                if (bestVoice) {
-                    utterance.voice = bestVoice;
-                }
-                
-                // Set properties for more natural speech
-                utterance.lang = currentLanguage;
-                utterance.rate = 1.0;
-                utterance.pitch = 1.0;
-                
-                // Add natural pauses with commas and periods
-               // utterance.text = textToSpeak.replace(/\./g, '.<break time="0.7s"/>').replace(/,/g, ',<break time="0.3s"/>');
-                
-                // Event when speech is done
-                utterance.onend = () => {
-                    this.classList.remove('speaking');
-                };
-                
-                // Event for speech errors
-                utterance.onerror = () => {
-                    this.classList.remove('speaking');
-                    console.error('Speech synthesis error');
-                };
-                
-                // Speak!
-                window.speechSynthesis.speak(utterance);
-            });
-        });
-    } else {
-        console.warn('Text-to-speech not supported in this browser');
-        
-        // Hide all speak buttons
-        document.querySelectorAll('.speak-btn').forEach(button => {
-            button.style.display = 'none';
-        });
+        return;
     }
     
-    // Add event listeners for newly added messages
-    const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-            if (mutation.addedNodes.length) {
-                const newButtons = mutation.target.querySelectorAll('.speak-btn:not([data-initialized])');
-                newButtons.forEach(button => {
-                    button.setAttribute('data-initialized', 'true');
-                    
-                    button.addEventListener('click', function() {
-                        const messageContent = this.closest('.message-content');
-                        const textToSpeak = messageContent.textContent.replace('Listen to this response', '').trim();
-                        
-                        if (window.speechSynthesis.speaking) {
-                            window.speechSynthesis.cancel();
-                            document.querySelectorAll('.speak-btn').forEach(btn => {
-                                btn.classList.remove('speaking');
-                            });
-                            
-                            if (this.classList.contains('speaking')) {
-                                this.classList.remove('speaking');
-                                return;
-                            }
-                        }
-                        
-                        this.classList.add('speaking');
-                        const utterance = new SpeechSynthesisUtterance(textToSpeak);
-                        
-                        // Get best voice for dynamically added buttons too
-                        const bestVoice = window.speechSynthesis.getVoices().find(voice => 
-                            voice.lang.includes('en') && 
-                            (voice.name.includes('Natural') || 
-                             voice.name.includes('Neural') || 
-                             voice.name.includes('Premium') ||
-                             voice.name.includes('Wavenet'))
-                        );
-                        
-                        if (bestVoice) {
-                            utterance.voice = bestVoice;
-                        }
-                        
-                        utterance.lang = 'en-US';
-                        utterance.rate = 1.0;
-                        utterance.pitch = 1.0;
-                        
-                        utterance.onend = () => this.classList.remove('speaking');
-                        utterance.onerror = () => {
-                            this.classList.remove('speaking');
-                            console.error('Speech synthesis error');
-                        };
-                        
-                        window.speechSynthesis.speak(utterance);
-                    });
-                });
-            }
-        });
+    // Get the text to speak (the parent element's text, excluding the button itself)
+    const messageContent = button.parentElement;
+    let textToSpeak = '';
+    
+    // Get all text nodes (excluding the button)
+    for (let i = 0; i < messageContent.childNodes.length; i++) {
+        const node = messageContent.childNodes[i];
+        // If it's a text node or not the button
+        if (node.nodeType === Node.TEXT_NODE || (node.nodeType === Node.ELEMENT_NODE && node !== button)) {
+            textToSpeak += node.textContent;
+        }
+    }
+    
+    // Clean up the text (optional)
+    textToSpeak = textToSpeak.trim();
+    
+    // Check browser support
+    if ('speechSynthesis' in window) {
+        // Stop any ongoing speech
+        window.speechSynthesis.cancel();
+        
+        // Create a new speech synthesis utterance
+        const utterance = new SpeechSynthesisUtterance(textToSpeak);
+        
+        // Get the selected language
+        const languageSelector = document.getElementById('language-selector');
+        const selectedLanguage = languageSelector ? languageSelector.value : 'en-IN'; // Default to Indian English
+        
+        // Set the language
+        utterance.lang = selectedLanguage;
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        
+        // Select the appropriate voice
+        selectVoice(utterance, selectedLanguage);
+        
+        // Speak the text
+        window.speechSynthesis.speak(utterance);
+        
+        // Visual feedback - change button icon while speaking
+        const icon = button.querySelector('i');
+        icon.classList.remove('fa-volume-up');
+        icon.classList.add('fa-volume-mute');
+        
+        // When speech ends, restore the icon
+        utterance.onend = function() {
+            icon.classList.remove('fa-volume-mute');
+            icon.classList.add('fa-volume-up');
+        };
+    } else {
+        alert('Sorry, your browser does not support text-to-speech!');
+    }
+}
+
+// Function to select the best voice for the utterance
+function selectVoice(utterance, language) {
+    const voices = window.speechSynthesis.getVoices();
+    console.log(`Available voices: ${voices.length}`);
+    
+    if (voices.length === 0) {
+        console.log('No voices available');
+        return;
+    }
+    
+    // Log all available voices for debugging
+    voices.forEach((voice, i) => {
+        console.log(`Voice ${i}: ${voice.name} (${voice.lang}) - ${voice.localService ? 'Local' : 'Remote'}`);
     });
     
-    observer.observe(document.getElementById('chat-messages'), { childList: true, subtree: true });
-}); 
-
-// Add this function to the speech.js file (near the getBestVoice function)
-function getBestVoiceForLanguage(languageCode) {
-    // Get all available voices
-    const allVoices = window.speechSynthesis.getVoices();
+    // Try to find voices in this priority order:
+    // 1. Female Indian English (en-IN) or Hindi (hi-IN) based on selected language
+    // 2. Any Indian English/Hindi voice
+    // 3. Any female voice for the selected language
+    // 4. Any voice for the selected language
+    // 5. Default voice
     
-    // Try to find a voice that exactly matches the language code
-    let matchingVoices = allVoices.filter(voice => voice.lang === languageCode);
+    const langPrefix = language.split('-')[0]; // Get language code without region (e.g., 'en', 'hi')
     
-    // If we found matching voices, prioritize ones with "natural" or "premium" in their name
-    if (matchingVoices.length > 0) {
-        const naturalVoice = matchingVoices.find(voice => 
-            voice.name.includes('Natural') || 
-            voice.name.includes('Neural') || 
-            voice.name.includes('Premium') ||
-            voice.name.includes('Wavenet')
-        );
-        
-        if (naturalVoice) return naturalVoice;
-        return matchingVoices[0];
+    // First, try to find a female voice with exact match for Indian English/Hindi
+    const femaleIndianVoice = voices.find(voice => 
+        voice.lang === language && 
+        (voice.name.toLowerCase().includes('female') || 
+         voice.name.toLowerCase().includes('woman') ||
+         voice.name.toLowerCase().includes('girl'))
+    );
+    
+    if (femaleIndianVoice) {
+        console.log(`Using female ${language} voice: ${femaleIndianVoice.name}`);
+        utterance.voice = femaleIndianVoice;
+        return;
     }
     
-    // If no exact match, try to find a voice that matches the language part (e.g., 'hi' from 'hi-IN')
-    const languageBase = languageCode.split('-')[0];
-    matchingVoices = allVoices.filter(voice => voice.lang.startsWith(languageBase + '-'));
+    // Second, try any Indian English/Hindi voice
+    const anyIndianVoice = voices.find(voice => voice.lang === language);
+    if (anyIndianVoice) {
+        console.log(`Using ${language} voice: ${anyIndianVoice.name}`);
+        utterance.voice = anyIndianVoice;
+        return;
+    }
     
-    if (matchingVoices.length > 0) return matchingVoices[0];
+    // Third, try any female voice for the language prefix (e.g., any 'en' or 'hi' voice)
+    const femaleLangVoice = voices.find(voice => 
+        voice.lang.startsWith(langPrefix) && 
+        (voice.name.toLowerCase().includes('female') || 
+         voice.name.toLowerCase().includes('woman') ||
+         voice.name.toLowerCase().includes('girl'))
+    );
     
-    // Fallback to any available voice for the region (e.g., 'en-IN' if available)
-    const regionVoices = allVoices.filter(voice => voice.lang.endsWith('-IN'));
-    if (regionVoices.length > 0) return regionVoices[0];
+    if (femaleLangVoice) {
+        console.log(`Using female ${langPrefix} voice: ${femaleLangVoice.name}`);
+        utterance.voice = femaleLangVoice;
+        return;
+    }
     
-    // Last resort: return null and let the browser choose
-    return null;
-} 
+    // Fourth, try any voice for the language prefix
+    const anyLangVoice = voices.find(voice => voice.lang.startsWith(langPrefix));
+    if (anyLangVoice) {
+        console.log(`Using ${langPrefix} voice: ${anyLangVoice.name}`);
+        utterance.voice = anyLangVoice;
+        return;
+    }
+    
+    // Fifth, try any female voice
+    const anyFemaleVoice = voices.find(voice => 
+        voice.name.toLowerCase().includes('female') || 
+        voice.name.toLowerCase().includes('woman') ||
+        voice.name.toLowerCase().includes('girl')
+    );
+    
+    if (anyFemaleVoice) {
+        console.log(`Using any female voice: ${anyFemaleVoice.name}`);
+        utterance.voice = anyFemaleVoice;
+        return;
+    }
+    
+    // If all else fails, use the first available voice
+    console.log(`No matching voice found, using default: ${voices[0].name}`);
+}
+
+// Function to populate available voices
+function populateVoiceList() {
+    const voices = window.speechSynthesis.getVoices();
+    const languageSelector = document.getElementById('language-selector');
+    
+    if (!languageSelector) return;
+    
+    // Clear previous options
+    languageSelector.innerHTML = '';
+    
+    // Add default options for Indian languages
+    const indianLanguages = [
+        { code: 'en-IN', name: 'English (India)' },
+        { code: 'hi-IN', name: 'Hindi' },
+        { code: 'ta-IN', name: 'Tamil' },
+        { code: 'te-IN', name: 'Telugu' },
+        { code: 'bn-IN', name: 'Bengali' },
+        { code: 'mr-IN', name: 'Marathi' },
+        { code: 'gu-IN', name: 'Gujarati' },
+        { code: 'kn-IN', name: 'Kannada' },
+        { code: 'ml-IN', name: 'Malayalam' }
+    ];
+    
+    // Create option elements
+    indianLanguages.forEach(lang => {
+        const option = document.createElement('option');
+        option.value = lang.code;
+        option.textContent = lang.name;
+        
+        // Check if there's a matching voice available
+        const hasVoice = voices.some(voice => voice.lang.startsWith(lang.code.split('-')[0]));
+        
+        // Add a note if no voice is available
+        if (!hasVoice) {
+            option.textContent += ' (may use fallback voice)';
+        }
+        
+        languageSelector.appendChild(option);
+    });
+    
+    // Set default to Hindi if available, otherwise English (India)
+    if (languageSelector.querySelector('option[value="hi-IN"]')) {
+        languageSelector.value = 'hi-IN';
+    } else {
+        languageSelector.value = 'en-IN';
+    }
+    
+    console.log(`Populated ${indianLanguages.length} language options, default: ${languageSelector.value}`);
+}
+
+// Update voice input recognition language when text-to-speech language changes
+function updateVoiceRecognitionLanguage() {
+    const languageSelector = document.getElementById('language-selector');
+    if (!languageSelector) return;
+    
+    languageSelector.addEventListener('change', function() {
+        const selectedLanguage = this.value;
+        
+        // Try to update the speech recognition language if it's active
+        if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+            // This is a signal for the voice-input.js script
+            window.selectedRecognitionLanguage = selectedLanguage;
+            console.log(`Set recognition language to: ${selectedLanguage}`);
+        }
+    });
+}
+
+// Initialize voices when the page loads
+if ('speechSynthesis' in window) {
+    // For Chrome
+    window.speechSynthesis.onvoiceschanged = function() {
+        populateVoiceList();
+        updateVoiceRecognitionLanguage();
+    };
+    
+    // For Firefox/Safari
+    setTimeout(function() {
+        if (window.speechSynthesis.getVoices().length > 0) {
+            populateVoiceList();
+            updateVoiceRecognitionLanguage();
+        }
+    }, 1000);
+}
+
+// Initialize the language selector when the DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Create and add the language selector if it doesn't exist
+    if (!document.getElementById('language-selector')) {
+        const chatHeader = document.querySelector('.chat-header');
+        if (chatHeader) {
+            const languageContainer = document.createElement('div');
+            languageContainer.className = 'language-selector-container';
+            
+            const label = document.createElement('label');
+            label.htmlFor = 'language-selector';
+            label.textContent = 'Language: ';
+            
+            const select = document.createElement('select');
+            select.id = 'language-selector';
+            select.name = 'language-selector';
+            
+            languageContainer.appendChild(label);
+            languageContainer.appendChild(select);
+            
+            // Insert before the reset button
+            const resetForm = chatHeader.querySelector('.reset-form');
+            chatHeader.insertBefore(languageContainer, resetForm);
+            
+            // Try to populate the list immediately
+            if (window.speechSynthesis.getVoices().length > 0) {
+                populateVoiceList();
+                updateVoiceRecognitionLanguage();
+            }
+        }
+    }
+}); 

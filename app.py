@@ -90,7 +90,7 @@ def index():
                 }
                 
                 payload = {
-                    "model": "gemma2-9b-it",  # Using a smaller model that's more likely to be available
+                    "model": "llama-3.3-70b-versatile ",  # Using a smaller model that's more likely to be available
                     "messages": messages,
                     "temperature": 0.7,
                     "max_tokens": 800

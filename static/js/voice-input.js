@@ -1,69 +1,80 @@
+// Voice input functionality
 document.addEventListener('DOMContentLoaded', function() {
-    const micButton = document.getElementById('mic-btn');
-    const userInput = document.getElementById('user-input');
+    const voiceInputButton = document.getElementById('voice-input-button');
+    const userMessageInput = document.getElementById('user-message');
+    const messageForm = document.getElementById('message-form');
+    const languageSelector = document.getElementById('language-selector');
     
-    // Set default language to English (India)
-    const currentLanguage = 'en-IN';
+    // Check browser support for Speech Recognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
-    // Check if browser supports the Web Speech API for speech recognition
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-        // Create a speech recognition instance
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
         const recognition = new SpeechRecognition();
         
-        // Configure the speech recognition
+        // Configure the recognition
         recognition.continuous = true;
+        // Set language from selector if available, default to Indian English
+        recognition.lang = languageSelector ? languageSelector.value : 'en-IN';
         recognition.interimResults = true;
-        recognition.lang = currentLanguage;
+        recognition.maxAlternatives = 1;
         
-        // Set the document language for accessibility
-        document.documentElement.lang = currentLanguage.split('-')[0];
-        
-        // Set placeholder text
-        userInput.placeholder = 'Describe your symptoms or ask a health question...';
-        
-        // Variables to track recording state
-        let isRecording = false;
+        let isListening = false;
         let finalTranscript = '';
         
-        // Function to start/stop recording
-        micButton.addEventListener('click', function() {
-            if (!isRecording) {
-                // Start recording
+        // Listen for language changes
+        if (languageSelector) {
+            languageSelector.addEventListener('change', function() {
+                recognition.lang = this.value;
+                console.log(`Voice recognition language set to: ${this.value}`);
+            });
+        }
+        
+        // Also check for a signal from the speech.js file
+        const checkForLanguageChange = setInterval(function() {
+            if (window.selectedRecognitionLanguage) {
+                recognition.lang = window.selectedRecognitionLanguage;
+                console.log(`Voice recognition updated to: ${window.selectedRecognitionLanguage}`);
+                window.selectedRecognitionLanguage = null; // Clear the signal
+            }
+        }, 1000);
+        
+        // Start listening when button is clicked
+        voiceInputButton.addEventListener('click', function() {
+            if (!isListening) {
+                // Start listening
                 finalTranscript = '';
-                recognition.start();
-                micButton.classList.add('recording');
                 
-                // Show a brief message in the text area
-                const originalText = userInput.value;
-                const originalPlaceholder = userInput.placeholder;
-                userInput.placeholder = 'Listening... (click mic again to stop)';
-                
-                // Store the original values to restore later
-                userInput.dataset.originalPlaceholder = originalPlaceholder;
-                userInput.dataset.originalText = originalText;
-            } else {
-                // Stop recording
-                recognition.stop();
-                micButton.classList.remove('recording');
-                
-                // Restore the original placeholder
-                if (userInput.dataset.originalPlaceholder) {
-                    userInput.placeholder = userInput.dataset.originalPlaceholder;
+                // Update language from selector if it changed
+                if (languageSelector) {
+                    recognition.lang = languageSelector.value;
+                    console.log(`Voice recognition language: ${languageSelector.value}`);
                 }
+                
+                recognition.start();
+                isListening = true;
+                
+                // Update button visual state
+                voiceInputButton.innerHTML = '<i class="fas fa-microphone-slash"></i>';
+                voiceInputButton.classList.add('listening');
+            } else {
+                // Stop listening
+                recognition.stop();
+                isListening = false;
+                
+                // Update button visual state
+                voiceInputButton.innerHTML = '<i class="fas fa-microphone"></i>';
+                voiceInputButton.classList.remove('listening');
             }
         });
         
-        // Handle the results of speech recognition
+        // Process the result
         recognition.onresult = function(event) {
             let interimTranscript = '';
             
-            // Loop through the results
-            for (let i = event.resultIndex; i < event.results.length; ++i) {
-                // Get the transcript
+            // Process results
+            for (let i = event.resultIndex; i < event.results.length; i++) {
                 const transcript = event.results[i][0].transcript;
                 
-                // Check if the result is final
                 if (event.results[i].isFinal) {
                     finalTranscript += transcript + ' ';
                 } else {
@@ -71,68 +82,71 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
             
-            // Update the text area with recognized speech
-            userInput.value = finalTranscript + interimTranscript;
-            
-            // Auto-resize the textarea if needed
-            userInput.style.height = 'auto';
-            userInput.style.height = (userInput.scrollHeight) + 'px';
-        };
-        
-        // Handle the end of speech recognition
-        recognition.onend = function() {
-            if (isRecording) {
-                try {
-                    // Try to restart if we were still recording
-                    recognition.start();
-                } catch (e) {
-                    console.error('Failed to restart speech recognition:', e);
-                    isRecording = false;
-                    micButton.classList.remove('recording');
-                    
-                    if (userInput.dataset.originalPlaceholder) {
-                        userInput.placeholder = userInput.dataset.originalPlaceholder;
-                    }
-                }
-            }
-        };
-        
-        // Handle starting of speech recognition
-        recognition.onstart = function() {
-            isRecording = true;
+            // Update input field with the current transcription
+            userMessageInput.value = finalTranscript + interimTranscript;
         };
         
         // Handle errors
         recognition.onerror = function(event) {
-            console.error('Speech recognition error:', event.error);
+            console.error('Speech recognition error', event.error);
             
-            // Show error message
-            if (event.error !== 'aborted') {
-                userInput.placeholder = 'Error: ' + event.error + '. Try again.';
-                
-                setTimeout(() => {
-                    if (userInput.dataset.originalPlaceholder) {
-                        userInput.placeholder = userInput.dataset.originalPlaceholder;
-                    }
-                }, 3000);
+            if (event.error === 'no-speech') {
+                console.log('No speech was detected. Still listening...');
+                // Don't stop listening or show alerts for no-speech in continuous mode
+            } else if (event.error === 'audio-capture') {
+                alert('No microphone was found. Ensure that a microphone is installed and the microphone settings are configured correctly.');
+                resetRecognition();
+            } else if (event.error === 'not-allowed') {
+                alert('Permission to use microphone is blocked. Please allow microphone access in your browser settings.');
+                resetRecognition();
+            } else if (event.error === 'aborted') {
+                // Do nothing, this is expected when stopping manually
+            } else {
+                alert('Speech recognition error occurred. Please try again.');
+                resetRecognition();
             }
-            
-            isRecording = false;
-            micButton.classList.remove('recording');
         };
         
-        // Stop recording if page is hidden
-        document.addEventListener('visibilitychange', function() {
-            if (document.hidden && isRecording) {
-                recognition.stop();
-                isRecording = false;
-                micButton.classList.remove('recording');
+        // Restart recognition when it ends (unless manually stopped)
+        recognition.onend = function() {
+            if (isListening) {
+                // If we're still supposed to be listening, restart
+                recognition.start();
+            } else {
+                resetRecognition();
             }
-        });
+        };
         
+        // Helper function to reset the recognition state
+        function resetRecognition() {
+            isListening = false;
+            voiceInputButton.innerHTML = '<i class="fas fa-microphone"></i>';
+            voiceInputButton.classList.remove('listening');
+        }
+        
+        // Clean up when page unloads
+        window.addEventListener('beforeunload', function() {
+            clearInterval(checkForLanguageChange);
+        });
     } else {
-        // Browser doesn't support speech recognition
-        console.warn('Speech recognition not supported in this browser');
-        micButton.style.display = 'none';
+        // Hide the button if speech recognition is not supported
+        voiceInputButton.style.display = 'none';
+        console.warn("This browser doesn't support speech recognition");
     }
+    
+    // Add some CSS for the listening state
+    const style = document.createElement('style');
+    style.innerHTML = `
+        #voice-input-button.listening {
+            color: #e74c3c;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+    `;
+    document.head.appendChild(style);
 }); 
